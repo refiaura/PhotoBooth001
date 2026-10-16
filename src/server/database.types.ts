@@ -34,8 +34,11 @@ export type Database = {
           id: string;
           paused_at: string | null;
           paused_from: Database["public"]["Enums"]["booth_status"] | null;
+          ready_guest: boolean;
+          ready_host: boolean;
           retake_shot: number | null;
           shot_fire_at: string | null;
+          shots: NonNullable<Json>;
           show_mark: boolean;
           status: Database["public"]["Enums"]["booth_status"];
           strip_date: string | null;
@@ -54,8 +57,11 @@ export type Database = {
           id?: string;
           paused_at?: string | null;
           paused_from?: Database["public"]["Enums"]["booth_status"] | null;
+          ready_guest?: boolean;
+          ready_host?: boolean;
           retake_shot?: number | null;
           shot_fire_at?: string | null;
+          shots?: NonNullable<Json>;
           show_mark?: boolean;
           status?: Database["public"]["Enums"]["booth_status"];
           strip_date?: string | null;
@@ -73,8 +79,11 @@ export type Database = {
           id?: string;
           paused_at?: string | null;
           paused_from?: Database["public"]["Enums"]["booth_status"] | null;
+          ready_guest?: boolean;
+          ready_host?: boolean;
           retake_shot?: number | null;
           shot_fire_at?: string | null;
+          shots?: NonNullable<Json>;
           show_mark?: boolean;
           status?: Database["public"]["Enums"]["booth_status"];
           strip_date?: string | null;
@@ -98,7 +107,6 @@ export type Database = {
           id: string;
           joined_at: string;
           last_seen_at: string;
-          ready: boolean;
           role: Database["public"]["Enums"]["participant_role"];
           token_hash: string;
           user_agent: string | null;
@@ -109,7 +117,6 @@ export type Database = {
           id?: string;
           joined_at?: string;
           last_seen_at?: string;
-          ready?: boolean;
           role: Database["public"]["Enums"]["participant_role"];
           token_hash: string;
           user_agent?: string | null;
@@ -119,7 +126,6 @@ export type Database = {
           id?: string;
           joined_at?: string;
           last_seen_at?: string;
-          ready?: boolean;
           role?: Database["public"]["Enums"]["participant_role"];
           token_hash?: string;
           user_agent?: string | null;
