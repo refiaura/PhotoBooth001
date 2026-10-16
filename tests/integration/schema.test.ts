@@ -97,6 +97,37 @@ describe("constraint booth dan peserta", () => {
     expect(error?.code).toBe("23514");
   });
 
+  it("menolak sisa paused_at saat status bukan PAUSED", async () => {
+    const booth = await createBooth();
+    const { error } = await admin
+      .from("booths")
+      .update({ paused_at: new Date().toISOString() })
+      .eq("id", booth.id);
+    expect(error?.code).toBe("23514");
+  });
+
+  it("strip tetap ada (booth_id NULL) setelah booth dihapus, karena retensinya 30 hari", async () => {
+    const booth = await createBooth();
+    const slug = randomBytes(16).toString("base64url").slice(0, 22);
+    const { data: strip, error } = await admin
+      .from("strips")
+      .insert({
+        booth_id: booth.id,
+        format: "strip",
+        storage_key: `test/${randomUUID()}.png`,
+        public_slug: slug,
+      })
+      .select()
+      .single();
+    expect(error).toBeNull();
+
+    await admin.from("booths").delete().eq("id", booth.id);
+
+    const { data: after } = await admin.from("strips").select("booth_id").eq("id", strip!.id).single();
+    expect(after?.booth_id).toBeNull();
+    await admin.from("strips").delete().eq("id", strip!.id);
+  });
+
   it("booth hanya menerima satu host dan satu tamu (maksimal 2 peserta)", async () => {
     const booth = await createBooth();
     expect((await addParticipant(booth.id, "host")).error).toBeNull();

@@ -51,6 +51,6 @@ function readLocalSupabase(): LocalSupabase {
   return { url, anonKey, serviceRoleKey };
 }
 
-export default function setup(project: TestProject) {
+export default function setup(project: TestProject): void {
   project.provide("supabase", readLocalSupabase());
 }

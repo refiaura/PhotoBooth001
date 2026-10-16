@@ -4,7 +4,7 @@ import type { LocalSupabase } from "./supabase-global-setup";
  * Mengisi process.env agar modul server (serverEnv) memakai Supabase lokal.
  * Panggil SEBELUM meng-import route handler, karena env di-cache saat pertama dipakai.
  */
-export function useLocalServerEnv(supabase: LocalSupabase, overrides: Record<string, string> = {}) {
+export function useLocalServerEnv(supabase: LocalSupabase, overrides: Record<string, string> = {}): void {
   Object.assign(process.env, {
     NEXT_PUBLIC_SUPABASE_URL: supabase.url,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: supabase.anonKey,

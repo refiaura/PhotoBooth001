@@ -174,6 +174,8 @@ cara uji di HP, lalu **berhenti**. Commit kecil per langkah.
 4. Deteksi in-app browser (WhatsApp/IG/TikTok/Line) → layar "Buka di Chrome/Safari" (salin link + intent Android); panduan izin kamera per browser.
 5. Web Share API (HP) / salin link (desktop), halaman `/s/[slug]` dengan `og:image`, tombol "Hapus booth dan semua foto".
 6. Cron harian: hapus foto mentah > 7 hari, strip > 30 hari, booth kedaluwarsa; ping Supabase.
+   File Storage dihapus lebih dulu lewat Storage API, baru barisnya (cascade hanya menghapus baris).
+   Booth dihapus setelah fotonya kedaluwarsa (7 hari). Strip tetap hidup karena `booth_id` menjadi NULL.
 7. Header keamanan (CSP, HSTS, `Permissions-Policy: camera=(self)`, nosniff), PWA manifest, teks UI id + en, mode gelap, audit kontras/axe.
 8. E2E diperluas (retake, PAUSED/rejoin, tamu ketiga ditolak), checklist uji manual dua HP.
 

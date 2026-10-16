@@ -58,15 +58,19 @@ create table public.booths (
   expires_at   timestamptz not null default now() + interval '24 hours',
 
   constraint booths_expires_after_created check (expires_at > created_at),
+  -- PAUSED wajib punya kedua field; status lain wajib mengosongkan keduanya.
   constraint booths_paused_fields check (
-    (status = 'PAUSED') = (paused_from is not null and paused_at is not null)
+    (status = 'PAUSED' and paused_from is not null and paused_at is not null)
+    or (status <> 'PAUSED' and paused_from is null and paused_at is null)
   ),
   constraint booths_paused_from_valid check (
     paused_from is null or paused_from in ('WAITING_READY', 'CAPTURING')
   )
 );
 
--- Kode hanya perlu unik selama booth masih aktif.
+-- Kode hanya perlu unik selama booth masih aktif. Query pencarian harus mengulang
+-- predikat yang sama (status not in ('DONE','EXPIRED')) agar indeks ini terpakai,
+-- dan menambah expires_at > now() karena status EXPIRED diset secara lazy.
 create unique index booths_code_active_key
   on public.booths (code)
   where status not in ('DONE', 'EXPIRED');
@@ -125,10 +129,15 @@ create index photos_created_at_idx on public.photos (created_at);
 -- ---------------------------------------------------------------------------
 -- Hasil photostrip. Satu komposisi menghasilkan dua baris (strip + story)
 -- yang berbagi public_slug, sehingga halaman /s/:slug bisa menampilkan keduanya.
+-- Strip hidup 30 hari, lebih lama dari booth (24 jam), jadi booth_id menjadi NULL
+-- saat booth dihapus, bukan ikut terhapus.
+-- Catatan pembersihan (Fase 2): cascade hanya menghapus BARIS. File di Storage
+-- (photos.storage_key, strips.storage_key) harus dihapus dulu lewat Storage API
+-- sebelum barisnya dihapus, agar tidak ada file yatim.
 -- ---------------------------------------------------------------------------
 create table public.strips (
   id          uuid primary key default gen_random_uuid(),
-  booth_id    uuid not null references public.booths (id) on delete cascade,
+  booth_id    uuid references public.booths (id) on delete set null,
   format      public.strip_format not null,
   storage_key text not null,
   public_slug text not null check (public_slug ~ '^[A-Za-z0-9_-]{22}$'),
@@ -206,7 +215,10 @@ grant execute on function public.hit_rate_limit(text, integer, integer) to servi
 -- Tabel/fungsi baru di masa depan juga tertutup secara default.
 alter default privileges in schema public revoke all on tables from anon, authenticated;
 alter default privileges in schema public revoke all on sequences from anon, authenticated;
-alter default privileges in schema public revoke execute on functions from public, anon, authenticated;
+alter default privileges in schema public revoke execute on functions from anon, authenticated;
+-- EXECUTE ke PUBLIC adalah default GLOBAL Postgres; revoke per-schema tidak bisa
+-- mencabutnya, jadi harus dalam bentuk global untuk role pemilik migrasi.
+alter default privileges for role postgres revoke execute on functions from public;
 
 -- ---------------------------------------------------------------------------
 -- Storage: bucket privat. Tanpa policy di storage.objects untuk anon, sehingga

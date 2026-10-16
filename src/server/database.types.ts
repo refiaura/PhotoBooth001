@@ -207,7 +207,7 @@ export type Database = {
       };
       strips: {
         Row: {
-          booth_id: string;
+          booth_id: string | null;
           created_at: string;
           expires_at: string;
           format: Database["public"]["Enums"]["strip_format"];
@@ -217,7 +217,7 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
-          booth_id: string;
+          booth_id?: string | null;
           created_at?: string;
           expires_at?: string;
           format: Database["public"]["Enums"]["strip_format"];
@@ -226,7 +226,7 @@ export type Database = {
           storage_key: string;
         };
         Update: {
-          booth_id?: string;
+          booth_id?: string | null;
           created_at?: string;
           expires_at?: string;
           format?: Database["public"]["Enums"]["strip_format"];
