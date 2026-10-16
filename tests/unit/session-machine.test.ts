@@ -154,7 +154,14 @@ describe("SHOT_CAPTURED", () => {
     expect(r.next).toEqual(capturing(2));
   });
 
-  it("menolak di luar CAPTURING", () => {
+  it("retry konfirmasi shot terakhir setelah masuk COMPOSING tetap diterima tanpa efek", () => {
+    const s = snapshot({ status: "COMPOSING", hasGuest: true, shots: shotsDone(4) });
+    const r = ok(transition(s, { type: "SHOT_CAPTURED", role: "host", shotIndex: 3 }, NOW));
+    expect(r.next).toEqual(s);
+    expect(r.effects).toEqual([]);
+  });
+
+  it("menolak di luar CAPTURING/COMPOSING", () => {
     expect(
       transition(snapshot({ status: "REVIEW" }), { type: "SHOT_CAPTURED", role: "host", shotIndex: 0 }, NOW),
     ).toEqual({ ok: false, error: "INVALID_STATE" });

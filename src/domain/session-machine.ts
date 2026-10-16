@@ -101,12 +101,13 @@ export function transition(s: SessionSnapshot, event: SessionEvent, now: number)
     }
 
     case "SHOT_CAPTURED": {
-      if (s.status !== "CAPTURING" || s.currentShot === null) return fail("INVALID_STATE");
+      if (s.status !== "CAPTURING" && s.status !== "COMPOSING") return fail("INVALID_STATE");
       const { role, shotIndex } = event;
       if (!isShotIndex(shotIndex)) return fail("WRONG_SHOT");
-      // Konfirmasi ulang (retry jaringan) untuk foto yang sudah tercatat: tanpa efek.
+      // Konfirmasi ulang (retry jaringan, kirim ulang foto gagal) untuk foto yang sudah
+      // tercatat: tanpa efek. Berlaku juga di COMPOSING, agar foto terakhir tetap bisa diunggah.
       if (s.shots[role][shotIndex].captured) return unchanged(s);
-      if (shotIndex !== s.currentShot) return fail("WRONG_SHOT");
+      if (s.status !== "CAPTURING" || shotIndex !== s.currentShot) return fail("WRONG_SHOT");
 
       const shots = cloneShots(s.shots);
       shots[role][shotIndex].captured = true;
