@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# contoh env boleh di-commit (tanpa nilai asli)
+!.env.example
+
+# playwright
+/playwright-report/
+/test-results/
+/playwright/.cache/
