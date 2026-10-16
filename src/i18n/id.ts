@@ -64,6 +64,8 @@ export const id = {
     uploadSlow: "Sinyal lagi lemot, fotonya lagi dikirim ulang...",
     uploadFailed: "Ada foto yang gagal terkirim. Cek koneksi lalu kirim ulang.",
     retryUpload: "Kirim ulang foto",
+    recoverPhoto:
+      "Ada foto kamu yang belum terkirim. Nyalakan kamera, nanti foto penggantinya diambil otomatis.",
     composing: "Lagi nyusun photostrip kalian...",
     composingHint: "Biasanya nggak sampai lima detik.",
     reviewTitle: "Photostrip kalian sudah jadi!",

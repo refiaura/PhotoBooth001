@@ -241,7 +241,13 @@ export function SessionScreen({ booth, code }: { booth: BoothState; code: string
         {/* Saat menunggu tamu, mengundang adalah aksi utama; kamera bisa menyusul. */}
         {status === "WAITING_GUEST" && role === "host" && <InvitePanel code={code} />}
 
-        {NEEDS_CAMERA.has(status) && !camera.stream && (
+        {booth.recovery.needed && !camera.stream && (
+          <p role="alert" className="rounded-2xl bg-surface p-4 leading-relaxed">
+            {t.recoverPhoto}
+          </p>
+        )}
+
+        {(NEEDS_CAMERA.has(status) || booth.recovery.needed) && !camera.stream && (
           <div className="flex flex-col gap-2">
             <button
               type="button"

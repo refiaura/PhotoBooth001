@@ -15,6 +15,7 @@ import { PeerLink } from "@/client/rtc";
 import { loadToken, saveToken } from "@/client/token-store";
 import { submitPhoto } from "@/client/upload";
 import { serverToLocal } from "@/domain/clock-sync";
+import { orphanedShots } from "@/domain/recovery";
 import type { Role } from "@/domain/session-machine";
 
 export type BlockedReason = "not-found" | "full" | "gone" | "error";
@@ -65,6 +66,8 @@ export function useBooth(code: string) {
 
   const [uploadSlow, setUploadSlow] = useState(false);
   const [failedShots, setFailedShots] = useState<number[]>([]);
+  /** Shot yang fotonya sedang diproses atau masih tersimpan di memori perangkat ini. */
+  const [pendingShots, setPendingShots] = useState<number[]>([]);
   const [strip, setStrip] = useState<{ url: string; downloadUrl: string } | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -240,6 +243,7 @@ export function useBooth(code: string) {
         });
         applySession(res.session);
         capturedRef.current.delete(shotIndex);
+        setPendingShots((prev) => prev.filter((s) => s !== shotIndex));
       } catch (err) {
         console.error("[upload] gagal", err);
         setFailedShots((prev) => [...prev, shotIndex]);
@@ -267,6 +271,7 @@ export function useBooth(code: string) {
       const video = videoRef.current;
       if (!video || firedRef.current.has(key)) return;
       firedRef.current.add(key);
+      setPendingShots((prev) => [...prev, currentShot]);
       const canvas = grabFrame(video);
       window.__rinduCaptures?.push({ role: auth.role, shotIndex: currentShot, at: Date.now() });
       const photo = await encodeFrame(canvas);
@@ -275,6 +280,35 @@ export function useBooth(code: string) {
     }, delay);
     return () => clearTimeout(timer);
   }, [auth, status, fireAt, currentShot, offset, alreadyCaptured, stream, sendPhoto]);
+
+  // 5b. Pemulihan: foto yang tercatat dijepret tapi hilang dari perangkat (mis. reload di tengah
+  // unggahan) diganti frame baru, agar sesi tidak menunggu selamanya di COMPOSING.
+  const orphans =
+    auth && session ? orphanedShots(session.status, session.shots[auth.role], new Set(pendingShots)) : [];
+  const orphanKey = orphans.join(",");
+
+  useEffect(() => {
+    if (!stream || orphanKey === "") return;
+    const shots = orphanKey.split(",").map(Number);
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const tryRecover = async () => {
+      const video = videoRef.current;
+      // Kamera baru menyala: tunggu sampai frame pertama tersedia.
+      if (!video?.videoWidth) {
+        if (++attempts < 20) timer = setTimeout(tryRecover, 500);
+        return;
+      }
+      setPendingShots((prev) => [...prev, ...shots]);
+      const photo = await encodeFrame(grabFrame(video));
+      for (const shot of shots) {
+        capturedRef.current.set(shot, photo);
+        void sendPhoto(shot, photo);
+      }
+    };
+    timer = setTimeout(tryRecover, 0);
+    return () => clearTimeout(timer);
+  }, [stream, orphanKey, sendPhoto]);
 
   const retryFailed = useCallback(() => {
     for (const shot of failedShots) {
@@ -410,6 +444,7 @@ export function useBooth(code: string) {
     partner: { online: partnerOnline, stream: remoteStream, rtcState },
     setReady,
     upload: { slow: uploadSlow, failedShots, retry: retryFailed },
+    recovery: { needed: orphans.length > 0 },
     strip,
   };
 }

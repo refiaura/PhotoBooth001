@@ -86,4 +86,39 @@ test.describe("alur dua peserta", () => {
     await expect(host).toHaveURL(/\/s\/[A-Za-z0-9_-]{22}$/);
     await expect(host.getByRole("img", { name: /Photostrip/ })).toBeVisible();
   });
+
+  test("reload di tengah unggahan: foto pengganti diambil, sesi tetap selesai", async ({
+    browser,
+  }, testInfo) => {
+    const options = testInfo.project.use as BrowserContextOptions;
+    const host = await newParticipant(browser, options);
+    const guest = await newParticipant(browser, options);
+
+    await host.goto("/");
+    await host.getByLabel("Kode akses").fill(accessCode!);
+    await host.getByRole("button", { name: "Buat booth" }).click();
+    await expect(host).toHaveURL(/\/b\/[23456789A-Z]{6}$/);
+    const boothPath = new URL(host.url()).pathname;
+    await host.getByRole("button", { name: "Nyalakan kamera" }).click();
+
+    await guest.goto(boothPath);
+    await guest.getByRole("button", { name: "Masuk booth" }).click();
+    await guest.getByRole("button", { name: "Nyalakan kamera" }).click();
+
+    // Konfirmasi unggahan host gagal terus (mis. sinyal hilang), jadi foto tertahan di memori.
+    await host.route("**/api/booths/*/photos", (route) => route.abort());
+    await host.getByRole("button", { name: "Siap!" }).click();
+    await guest.getByRole("button", { name: "Siap!" }).click();
+    await expect(guest.getByText("Lagi nyusun photostrip kalian...")).toBeVisible({ timeout: 60_000 });
+
+    // Host me-reload: foto di memori hilang, server masih menunggu 4 foto host.
+    await host.unroute("**/api/booths/*/photos");
+    await host.reload();
+    await expect(host.getByText(/Ada foto kamu yang belum terkirim/)).toBeVisible();
+    await host.getByRole("button", { name: "Nyalakan kamera" }).click();
+
+    for (const page of [host, guest]) {
+      await expect(page.getByTestId("strip-image")).toBeVisible({ timeout: 60_000 });
+    }
+  });
 });
