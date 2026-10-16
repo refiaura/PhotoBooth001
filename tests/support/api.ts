@@ -1,6 +1,8 @@
 import { randomInt } from "node:crypto";
 
-type Handler = (request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>;
+/** Gabungan semua parameter dinamis di app/api; handler yang butuh sebagian tetap kompatibel. */
+type RouteParams = { code: string; slug: string };
+type Handler = (request: Request, ctx: { params: Promise<RouteParams> }) => Promise<Response>;
 
 /** IP acak per pemanggil agar rate limit antar-tes tidak saling mengganggu. */
 export const randomIp = () => `10.${randomInt(256)}.${randomInt(256)}.${randomInt(1, 255)}`;
@@ -11,7 +13,7 @@ export async function call<T = Record<string, unknown>>(
   options: {
     method?: string;
     path?: string;
-    params?: Record<string, string>;
+    params?: Partial<RouteParams>;
     token?: string;
     body?: unknown;
     ip?: string;
@@ -26,7 +28,7 @@ export async function call<T = Record<string, unknown>>(
     headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });
-  const res = await handler(request, { params: Promise.resolve(options.params ?? {}) });
+  const res = await handler(request, { params: Promise.resolve((options.params ?? {}) as RouteParams) });
   const text = await res.text();
   return { status: res.status, body: (text ? JSON.parse(text) : {}) as T };
 }
