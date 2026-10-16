@@ -26,6 +26,7 @@ let routes: {
   photos: typeof import("@/app/api/booths/[code]/photos/route");
   strips: typeof import("@/app/api/booths/[code]/strips/route");
   strip: typeof import("@/app/api/strips/[slug]/route");
+  state: typeof import("@/app/api/booths/[code]/state/route");
 };
 
 beforeAll(async () => {
@@ -41,10 +42,12 @@ beforeAll(async () => {
     photos: await import("@/app/api/booths/[code]/photos/route"),
     strips: await import("@/app/api/booths/[code]/strips/route"),
     strip: await import("@/app/api/strips/[slug]/route"),
+    state: await import("@/app/api/booths/[code]/state/route"),
   };
 });
 
 const anon = createClient(supabase.url, supabase.anonKey, { auth: { persistSession: false } });
+const admin = createClient(supabase.url, supabase.serviceRoleKey, { auth: { persistSession: false } });
 const channels: RealtimeChannel[] = [];
 afterAll(async () => {
   await Promise.all(channels.map((c) => c.unsubscribe()));
@@ -85,12 +88,12 @@ const webp = (color: string) =>
 
 /** Alur klien untuk satu jepretan: minta URL (= captured), unggah langsung ke Storage, konfirmasi. */
 async function captureAndUpload(code: string, token: string, shotIndex: number, color: string) {
-  const url = await call<{ photoId: string; path: string; token: string }>(routes.uploadUrl.POST, {
-    params: { code },
-    token,
-    body: { shotIndex, mimeType: "image/webp" },
-  });
+  const url = await call<{ photoId: string; uploaded: boolean; path: string; token: string }>(
+    routes.uploadUrl.POST,
+    { params: { code }, token, body: { shotIndex, mimeType: "image/webp" } },
+  );
   expect(url.status).toBe(200);
+  expect(url.body.uploaded).toBe(false);
 
   const up = await anon.storage
     .from("booth-media")
@@ -338,6 +341,110 @@ describe("alur sesi lengkap: 4 jepretan × 2 orang → photostrip", () => {
   });
 });
 
+describe("ketahanan: sesi tidak boleh macet", () => {
+  type Shots = { host: Array<{ captured: boolean; uploaded: boolean }> };
+
+  async function startCapturing() {
+    const { code, token } = await createBooth();
+    const guest = await joinAsGuest(code);
+    await setReady(code, token);
+    await setReady(code, guest.token);
+    return { code, hostToken: token, guestToken: guest.token };
+  }
+
+  it("GET state ringan: snapshot tanpa token Realtime/TURN", async () => {
+    const { code, hostToken } = await startCapturing();
+    const res = await call<{ role: string; session: Session } & Record<string, unknown>>(routes.state.GET, {
+      params: { code },
+      token: hostToken,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.role).toBe("host");
+    expect(res.body.session.status).toBe("CAPTURING");
+    expect(res.body).not.toHaveProperty("iceServers");
+    expect(res.body).not.toHaveProperty("realtime");
+    expect((await call(routes.state.GET, { params: { code } })).status).toBe(401);
+  });
+
+  it("minta upload URL ulang untuk shot terakhir setelah COMPOSING tetap berhasil", async () => {
+    const { code, hostToken, guestToken } = await startCapturing();
+    for (let shot = 0; shot < 4; shot++) {
+      await Promise.all([
+        captureAndUpload(code, hostToken, shot, "#111111"),
+        captureAndUpload(code, guestToken, shot, "#222222"),
+      ]);
+    }
+    const retry = await call(routes.uploadUrl.POST, {
+      params: { code },
+      token: hostToken,
+      body: { shotIndex: 3, mimeType: "image/webp" },
+    });
+    expect(retry.status).toBe(200);
+    // File sudah ada di Storage: server tidak memberi URL untuk menimpanya, klien lanjut konfirmasi.
+    expect(retry.body).toMatchObject({ uploaded: true });
+    expect(retry.body).not.toHaveProperty("token");
+  });
+
+  it("konfirmasi ulang memulihkan tanda unggahan bila event sebelumnya gagal tersimpan", async () => {
+    const { code, hostToken } = await startCapturing();
+    const photoId = await captureAndUpload(code, hostToken, 0, "#333333");
+    // Simulasi: file sudah ditandai terunggah, tetapi transisi state gagal (mis. 503 BUSY).
+    await admin.from("photos").update({ uploaded_at: new Date().toISOString() }).eq("id", photoId);
+
+    const res = await call<{ session: Session & { shots: Shots } }>(routes.photos.POST, {
+      params: { code },
+      token: hostToken,
+      body: { photoId },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.session.shots.host[0].uploaded).toBe(true);
+  });
+
+  it("komposisi yang gagal melepas klaimnya; konfirmasi foto tetap 200", async () => {
+    const { code, hostToken, guestToken } = await startCapturing();
+    const ids: Array<[string, string]> = [];
+    for (let shot = 0; shot < 4; shot++) {
+      const [h, g] = await Promise.all([
+        captureAndUpload(code, hostToken, shot, "#444444"),
+        captureAndUpload(code, guestToken, shot, "#555555"),
+      ]);
+      ids.push([hostToken, h], [guestToken, g]);
+    }
+    // Konfirmasi semua kecuali satu, lalu hapus file salah satu foto yang sudah terkonfirmasi.
+    const last = ids.pop()!;
+    for (const [t, photoId] of ids) expect((await confirm(code, t, photoId)).status).toBe(200);
+    const { data: broken } = await admin.from("photos").select("storage_key").eq("id", ids[0][1]).single();
+    await admin.storage.from("booth-media").remove([broken!.storage_key]);
+
+    const res = await confirm(code, last[0], last[1]);
+    expect(res.status).toBe(200);
+    expect(res.body.session.status).toBe("COMPOSING");
+
+    const { data: booth } = await admin.from("booths").select("compose_started_at").eq("code", code).single();
+    expect(booth!.compose_started_at).toBeNull();
+  });
+
+  it("klaim komposisi dikosongkan lagi setelah strip jadi", async () => {
+    const { code, hostToken, guestToken } = await startCapturing();
+    const ids: Array<[string, string]> = [];
+    for (let shot = 0; shot < 4; shot++) {
+      const [h, g] = await Promise.all([
+        captureAndUpload(code, hostToken, shot, "#666666"),
+        captureAndUpload(code, guestToken, shot, "#777777"),
+      ]);
+      ids.push([hostToken, h], [guestToken, g]);
+    }
+    for (const [t, photoId] of ids) await confirm(code, t, photoId);
+
+    const { data: booth } = await admin
+      .from("booths")
+      .select("status, compose_started_at")
+      .eq("code", code)
+      .single();
+    expect(booth).toEqual({ status: "REVIEW", compose_started_at: null });
+  });
+});
+
 describe("Realtime: kanal privat per booth", () => {
   async function realtimeFor(code: string, token: string) {
     const res = await call<{ realtime: { channel: string; token: string } }>(routes.session.GET, {
@@ -384,5 +491,25 @@ describe("Realtime: kanal privat per booth", () => {
 
     const sub = await subscribe(rtB.channel, rtA.token);
     expect(await sub.status).not.toBe("SUBSCRIBED");
+  });
+
+  it("peserta bisa saling kirim rtc:signal di kanal booth", async () => {
+    const { code, token } = await createBooth();
+    const guest = await joinAsGuest(code);
+    const rtHost = await realtimeFor(code, token);
+    const rtGuest = await realtimeFor(code, guest.token);
+    const hostSub = await subscribe(rtHost.channel, rtHost.token);
+    const guestSub = await subscribe(rtGuest.channel, rtGuest.token);
+    expect(await hostSub.status).toBe("SUBSCRIBED");
+    expect(await guestSub.status).toBe("SUBSCRIBED");
+
+    await guestSub.channel.send({
+      type: "broadcast",
+      event: "rtc:signal",
+      payload: { from: "guest", hello: true },
+    });
+    await expect
+      .poll(() => hostSub.received.some((m) => m.event === "rtc:signal"), { timeout: 5000 })
+      .toBe(true);
   });
 });

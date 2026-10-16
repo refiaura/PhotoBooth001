@@ -9,6 +9,7 @@ import {
   hasGuest as loadHasGuest,
   insertStrip,
   latestUploadedPhotos,
+  releaseCompose,
   storage,
 } from "./booth-repo";
 import {
@@ -90,7 +91,9 @@ async function runEffects(booth: BoothRow, effects: SessionEffect[]) {
     if (effect.type === "SHOT_SCHEDULED") {
       await broadcast(booth.id, "shot:scheduled", { shotIndex: effect.shotIndex, fireAt: effect.fireAt });
     } else {
-      await composeStrip(booth.id);
+      // State sudah tersimpan; kegagalan komposisi tidak boleh menggagalkan request pemicu.
+      // Klien mencoba ulang lewat POST /strips secara berkala selama masih COMPOSING.
+      await composeStrip(booth.id).catch((err) => console.error("[compose] gagal", err));
     }
   }
 }
@@ -101,7 +104,16 @@ async function runEffects(booth: BoothRow, effects: SessionEffect[]) {
  */
 export async function composeStrip(boothId: string): Promise<void> {
   if (!(await claimCompose(boothId))) return;
+  try {
+    await composeClaimed(boothId);
+  } catch (err) {
+    // Lepas klaim agar percobaan berikutnya tidak perlu menunggu klaim dianggap basi.
+    await releaseCompose(boothId);
+    throw err;
+  }
+}
 
+async function composeClaimed(boothId: string) {
   const booth = await getBooth(boothId);
   const photos = await latestUploadedPhotos(boothId);
   const buffers = await Promise.all(
@@ -119,6 +131,11 @@ export async function composeStrip(boothId: string): Promise<void> {
   if (error) throw error;
   await insertStrip({ boothId, slug, storageKey });
 
-  const { booth: done } = await applyEvent(booth, { type: "COMPOSE_DONE" }, { strip_slug: slug });
+  const { booth: done } = await applyEvent(
+    booth,
+    { type: "COMPOSE_DONE" },
+    // Klaim dikosongkan agar retake (Fase 2) bisa menyusun ulang.
+    { strip_slug: slug, compose_started_at: null },
+  );
   await broadcast(boothId, "strip:ready", { stripSlug: done.strip_slug });
 }

@@ -1,12 +1,13 @@
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { Role } from "@/domain/session-machine";
-import type { PublicSession } from "./api";
 import { supabaseBrowser } from "./supabase-browser";
 
 export type RtcSignal = {
   from: Role;
   /** Tamu mengumumkan dirinya siap menerima offer (mis. setelah refresh atau kamera baru menyala). */
   hello?: true;
+  /** Id koneksi WebRTC (dibuat host per offer); sinyal dari koneksi lama diabaikan. */
+  linkId?: string;
   description?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit | null;
 };
@@ -26,7 +27,12 @@ export async function connectBoothRealtime(params: {
   channel: string;
   token: string;
   role: Role;
-  onState: (session: PublicSession) => void;
+  /**
+   * Dipanggil saat ada siaran `session:state`. Isinya sengaja TIDAK dipakai: peserta lain
+   * secara teknis bisa mengirim event dengan nama yang sama, jadi klien mengambil ulang state
+   * dari API (terautentikasi) sebagai sumber kebenaran.
+   */
+  onStateChanged: () => void;
   onSignal: (signal: RtcSignal) => void;
   onPresence: (online: Role[]) => void;
   onStatus: (status: RealtimeStatus) => void;
@@ -39,7 +45,7 @@ export async function connectBoothRealtime(params: {
   });
 
   channel
-    .on("broadcast", { event: "session:state" }, ({ payload }) => params.onState(payload as PublicSession))
+    .on("broadcast", { event: "session:state" }, () => params.onStateChanged())
     .on("broadcast", { event: "rtc:signal" }, ({ payload }) => {
       const signal = payload as RtcSignal;
       if (signal.from !== params.role) params.onSignal(signal);

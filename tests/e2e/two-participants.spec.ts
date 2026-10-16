@@ -71,6 +71,7 @@ test.describe("alur dua peserta", () => {
     expect(guestShots.map((c) => c.shotIndex)).toEqual([0, 1, 2, 3]);
     const skews = hostShots.map((h, i) => Math.abs(h.at - guestShots[i].at));
     testInfo.annotations.push({ type: "selisih jepret (ms)", description: skews.join(", ") });
+    console.log(`selisih jepret (ms): ${skews.join(", ")}`);
     for (const skew of skews) expect(skew).toBeLessThanOrEqual(MAX_SKEW_MS);
 
     // Kamera dimatikan setelah sesi selesai.

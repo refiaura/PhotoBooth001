@@ -256,3 +256,11 @@ Keputusan dan penyimpangan yang muncul saat implementasi:
 - **`next/font`:** Fredoka dipakai sebagai variable font. Mengisi `weight: [...]` memicu bug build Turbopack di Next 16.4.
 - **Hasil E2E:** selisih momen jepret antarperangkat terukur 5–42 ms (target ≤ 300 ms), dengan dua konteks
   Chromium dan kamera palsu di satu mesin. Angka di jaringan nyata perlu diukur lewat uji manual.
+- **Realtime tidak bisa memfilter nama event di policy.** Policy INSERT `realtime.messages` dievaluasi sekali saat
+  join, bukan per pesan. Akibatnya peserta secara teknis bisa mengirim event bernama `session:state`. Karena itu
+  klien memperlakukan siaran hanya sebagai pemicu dan selalu mengambil state dari `GET /api/booths/:code/state`
+  (terautentikasi). Endpoint ringan ini juga dipakai untuk polling, sehingga tidak memanggil API TURN.
+- **Ketahanan dari hasil review:** retry upload URL setelah COMPOSING tidak lagi 409, server tidak memberi URL untuk
+  menimpa file yang sudah ada, konfirmasi ulang tetap mengirim event (idempoten), klaim komposisi dilepas saat gagal
+  dan dikosongkan saat selesai, klien meminta komposisi ulang tiap 10 detik selama COMPOSING, dan slot tamu dilepas
+  bila join gagal di tengah jalan. Sinyal WebRTC membawa `linkId` agar answer untuk offer lama diabaikan.

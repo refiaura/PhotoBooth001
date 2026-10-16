@@ -67,12 +67,18 @@ export const api = {
 
   session: (code: string, token: string) => request<SessionResponse>(boothPath(code, "/session"), { token }),
 
+  /** Snapshot ringan untuk polling/sinkron ulang (tanpa token Realtime dan TURN). */
+  state: (code: string, token: string) =>
+    request<{ role: Role; session: PublicSession }>(boothPath(code, "/state"), { token }),
+
   setReady: (code: string, token: string, ready: boolean) =>
     request<{ session: PublicSession }>(boothPath(code, "/ready"), { token, body: { ready } }),
 
   /** Menandai jepretan sudah diambil + meminta signed upload URL. */
   shotCaptured: (code: string, token: string, shotIndex: number, mimeType: string) =>
-    request<{ photoId: string; path: string; token: string }>(boothPath(code, "/photos/upload-url"), {
+    request<
+      { photoId: string; uploaded: true } | { photoId: string; uploaded: false; path: string; token: string }
+    >(boothPath(code, "/photos/upload-url"), {
       token,
       body: { shotIndex, mimeType },
     }),

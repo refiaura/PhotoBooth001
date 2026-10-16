@@ -10,6 +10,7 @@ const PREVIEW_MAX_BITRATE = 600_000;
  * Hanya host (initiator) yang membuat offer; tamu membuat PeerLink saat offer tiba lalu
  * menjawab. Dengan satu arah negosiasi, offer tidak bisa saling bertabrakan atau hilang
  * karena sisi lain belum siap. Kandidat ICE yang tiba sebelum remote description diantrikan.
+ * Setiap koneksi punya `linkId`; sinyal milik koneksi lain (offer/answer lama) diabaikan.
  */
 export class PeerLink {
   private readonly pc: RTCPeerConnection;
@@ -20,6 +21,7 @@ export class PeerLink {
     private readonly options: {
       iceServers: IceServer[];
       initiator: boolean;
+      linkId: string;
       localStream: MediaStream;
       send: (signal: Omit<RtcSignal, "from">) => void;
       onRemoteStream: (stream: MediaStream) => void;
@@ -32,7 +34,7 @@ export class PeerLink {
       if (streams[0]) options.onRemoteStream(streams[0]);
     };
     this.pc.onicecandidate = ({ candidate }) => {
-      if (candidate) options.send({ candidate: candidate.toJSON() });
+      if (candidate) this.send({ candidate: candidate.toJSON() });
     };
     this.pc.onnegotiationneeded = async () => {
       if (!options.initiator || this.closed) return;
@@ -53,8 +55,12 @@ export class PeerLink {
     }
   }
 
-  async handleSignal({ description, candidate }: RtcSignal) {
-    if (this.closed) return;
+  get linkId() {
+    return this.options.linkId;
+  }
+
+  async handleSignal({ description, candidate, linkId }: RtcSignal) {
+    if (this.closed || linkId !== this.options.linkId) return;
     try {
       if (description) {
         // Initiator hanya menerima answer; tamu hanya menerima offer.
@@ -79,7 +85,11 @@ export class PeerLink {
   /** Membuat offer/answer sesuai signaling state lalu mengirimkannya ke pasangan. */
   private async sendLocalDescription() {
     await this.pc.setLocalDescription();
-    if (this.pc.localDescription) this.options.send({ description: this.pc.localDescription.toJSON() });
+    if (this.pc.localDescription) this.send({ description: this.pc.localDescription.toJSON() });
+  }
+
+  private send(signal: Pick<RtcSignal, "description" | "candidate">) {
+    this.options.send({ ...signal, linkId: this.options.linkId });
   }
 }
 

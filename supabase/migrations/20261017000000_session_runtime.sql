@@ -45,6 +45,9 @@ create policy "peserta menerima pesan booth sendiri"
     and realtime.messages.extension in ('broadcast', 'presence')
   );
 
+-- Catatan: Realtime mengevaluasi policy ini sekali saat join, bukan per pesan, jadi nama event
+-- tidak bisa difilter di sini. Peserta secara teknis bisa mengirim event bernama `session:state`;
+-- karena itu klien TIDAK mempercayai isi siaran dan selalu mengambil ulang state lewat API.
 create policy "peserta mengirim pesan ke booth sendiri"
   on realtime.messages
   for insert

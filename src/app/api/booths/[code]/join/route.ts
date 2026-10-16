@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { boothCodeFrom, sessionBody } from "@/server/booth-api";
-import { authenticate, findBoothByCode, insertParticipant } from "@/server/booth-repo";
+import { authenticate, deleteParticipant, findBoothByCode, insertParticipant } from "@/server/booth-repo";
 import { ApiError, clientIp, handler, json, readJson } from "@/server/http";
 import { enforceRateLimit } from "@/server/rate-limit";
 import { applyEvent, reconcileBooth } from "@/server/session-service";
@@ -37,6 +37,12 @@ export const POST = handler(async (request: Request, ctx: RouteContext<"/api/boo
   if (!guest) throw new ApiError(409, "FULL");
   console.info("[event] tamu_masuk");
 
-  const { booth: joined } = await applyEvent(booth, { type: "GUEST_JOINED" });
-  return json({ token, ...(await sessionBody(joined, "guest", true)) }, 201);
+  try {
+    const { booth: joined } = await applyEvent(booth, { type: "GUEST_JOINED" });
+    return json({ token, ...(await sessionBody(joined, "guest", true)) }, 201);
+  } catch (err) {
+    // Token belum sampai ke tamu: lepaskan slotnya agar booth tidak terkunci "penuh".
+    await deleteParticipant(guest.id);
+    throw err;
+  }
 });

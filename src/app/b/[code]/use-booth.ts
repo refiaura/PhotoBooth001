@@ -24,8 +24,8 @@ type Auth = { token: string } & Pick<SessionResponse, "role" | "realtime" | "ice
 
 /** Status setelah sesi selesai: kamera tidak lagi dibutuhkan. */
 const CAMERA_DONE = new Set(["REVIEW", "DONE", "EXPIRED"]);
-/** Bila komposisi belum selesai setelah ini, klien memintanya ulang (idempoten di server). */
-const COMPOSE_NUDGE_MS = 12_000;
+/** Selama komposisi belum selesai, klien memintanya ulang tiap interval ini (idempoten di server). */
+const COMPOSE_NUDGE_MS = 10_000;
 /** Cadangan bila Realtime belum tersambung: ambil snapshot berkala (lebih rapat saat menjepret). */
 const POLL_MS = 4000;
 const POLL_CAPTURING_MS = 1000;
@@ -72,6 +72,7 @@ export function useBooth(code: string) {
   const linkRef = useRef<PeerLink | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const onSignalRef = useRef<(signal: RtcSignal) => void>(() => {});
+  const refreshRef = useRef<() => Promise<void>>(async () => {});
   const capturedRef = useRef(new Map<number, CapturedPhoto>());
   const firedRef = useRef(new Set<string>());
 
@@ -137,11 +138,15 @@ export function useBooth(code: string) {
   const refresh = useCallback(async () => {
     if (!auth) return;
     try {
-      applySession((await api.session(code, auth.token)).session);
+      applySession((await api.state(code, auth.token)).session);
     } catch {
       // Dicoba lagi pada siklus berikutnya.
     }
   }, [auth, code, applySession]);
+
+  useEffect(() => {
+    refreshRef.current = refresh;
+  }, [refresh]);
 
   // 2. Kalibrasi jam sekali per sesi.
   useEffect(() => {
@@ -164,7 +169,7 @@ export function useBooth(code: string) {
       channel: auth.realtime.channel,
       token: auth.realtime.token,
       role: auth.role,
-      onState: applySession,
+      onStateChanged: () => void refreshRef.current(),
       onSignal: (signal) => onSignalRef.current(signal),
       onPresence: (online) => setPartnerOnline(online.includes(partner)),
       onStatus: setRealtimeStatus,
@@ -177,14 +182,14 @@ export function useBooth(code: string) {
       realtimeRef.current?.close();
       realtimeRef.current = null;
     };
-  }, [auth, applySession]);
+  }, [auth]);
 
   // Sinkron ulang setiap kali Realtime tersambung; polling bila belum/putus.
   useEffect(() => {
     if (!auth) return;
     if (realtimeStatus === "connected") {
       api
-        .session(code, auth.token)
+        .state(code, auth.token)
         .then((res) => applySession(res.session))
         .catch(() => {});
       return;
@@ -278,17 +283,17 @@ export function useBooth(code: string) {
     }
   }, [failedShots, sendPhoto]);
 
-  // 6. Komposisi macet? Minta ulang (server menjamin hanya sekali).
+  // 6. Komposisi macet? Minta ulang berkala selama masih COMPOSING (server menjamin hanya sekali).
   useEffect(() => {
     if (!auth || status !== "COMPOSING") return;
-    const timer = setTimeout(async () => {
+    const timer = setInterval(async () => {
       try {
         applySession((await api.composeStrip(code, auth.token)).session);
       } catch {
         void refresh();
       }
     }, COMPOSE_NUDGE_MS);
-    return () => clearTimeout(timer);
+    return () => clearInterval(timer);
   }, [auth, status, code, applySession, refresh]);
 
   // 7. Hasil siap: ambil signed URL photostrip.
@@ -311,12 +316,13 @@ export function useBooth(code: string) {
   }, [stream, sessionOver]);
 
   const makeLink = useCallback(
-    (initiator: boolean, localStream: MediaStream) => {
+    (initiator: boolean, localStream: MediaStream, linkId: string) => {
       if (!auth) return null;
       linkRef.current?.close();
       const link = new PeerLink({
         iceServers: auth.iceServers,
         initiator,
+        linkId,
         localStream,
         send: (signal) => realtimeRef.current?.sendSignal({ ...signal, from: auth.role }),
         onRemoteStream: setRemoteStream,
@@ -337,9 +343,9 @@ export function useBooth(code: string) {
         return;
       }
       // Tamu: setiap offer baru (mis. host refresh) memulai koneksi baru.
-      if (signal.description?.type === "offer") {
-        if (!streamRef.current) return;
-        makeLink(false, streamRef.current);
+      if (signal.description?.type === "offer" && signal.linkId !== linkRef.current?.linkId) {
+        if (!streamRef.current || !signal.linkId) return;
+        makeLink(false, streamRef.current, signal.linkId);
       }
       void linkRef.current?.handleSignal(signal);
     },
@@ -354,7 +360,7 @@ export function useBooth(code: string) {
 
   useEffect(() => {
     if (!rtcReady || auth.role !== "host" || !partnerOnline) return;
-    const link = makeLink(true, stream);
+    const link = makeLink(true, stream, crypto.randomUUID());
     return () => {
       link?.close();
       if (linkRef.current === link) linkRef.current = null;

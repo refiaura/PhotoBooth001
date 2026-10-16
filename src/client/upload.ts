@@ -29,16 +29,19 @@ export async function submitPhoto(params: {
   const target = await withRetry(() => api.shotCaptured(code, token, shotIndex, photo.mimeType), opts);
   onCaptured?.();
 
-  await withRetry(
-    async () => {
-      const { error } = await supabaseBrowser()
-        .storage.from(BUCKET)
-        .uploadToSignedUrl(target.path, target.token, photo.blob, { contentType: photo.mimeType });
-      // Unggahan sebelumnya ternyata sudah masuk (respons hilang di jalan): anggap berhasil.
-      if (error && !/exist|duplicate/i.test(error.message)) throw error;
-    },
-    { onRetry },
-  );
+  // `uploaded: true` = file sudah ada di Storage dari percobaan sebelumnya; langsung konfirmasi.
+  if (!target.uploaded) {
+    await withRetry(
+      async () => {
+        const { error } = await supabaseBrowser()
+          .storage.from(BUCKET)
+          .uploadToSignedUrl(target.path, target.token, photo.blob, { contentType: photo.mimeType });
+        // Unggahan sebelumnya ternyata sudah masuk (respons hilang di jalan): anggap berhasil.
+        if (error && !/exist|duplicate/i.test(error.message)) throw error;
+      },
+      { onRetry },
+    );
+  }
 
   return withRetry(() => api.confirmPhoto(code, token, target.photoId), opts);
 }

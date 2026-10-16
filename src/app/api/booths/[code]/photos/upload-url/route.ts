@@ -38,8 +38,12 @@ export const POST = handler(
         `${shotIndex}-v${PHOTO_VERSION}-${randomBytes(6).toString("hex")}.${EXT[mimeType]}`,
     });
 
+    // File sudah ada (retry setelah unggahan berhasil): jangan izinkan menimpa file yang
+    // mungkin sudah lolos validasi. Klien langsung lanjut ke konfirmasi.
+    if (photo.uploaded_at) return json({ photoId: photo.id, uploaded: true });
     const { data, error } = await storage().createSignedUploadUrl(photo.storage_key);
+    if (error && /exist|duplicate/i.test(error.message)) return json({ photoId: photo.id, uploaded: true });
     if (error) throw error;
-    return json({ photoId: photo.id, path: data.path, token: data.token });
+    return json({ photoId: photo.id, uploaded: false, path: data.path, token: data.token });
   },
 );

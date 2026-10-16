@@ -129,6 +129,16 @@ export async function claimCompose(boothId: string): Promise<boolean> {
   return (data ?? []).length > 0;
 }
 
+export async function releaseCompose(boothId: string): Promise<void> {
+  const { error } = await db().from("booths").update({ compose_started_at: null }).eq("id", boothId);
+  if (error) throw error;
+}
+
+export async function deleteParticipant(id: string): Promise<void> {
+  const { error } = await db().from("participants").delete().eq("id", id);
+  if (error) throw error;
+}
+
 /**
  * Versi foto. Fase 1 belum punya retake, jadi selalu 1.
  * Fase 2 (retake) menaikkan versi per shot yang diulang.
