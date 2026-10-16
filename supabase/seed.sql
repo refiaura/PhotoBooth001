@@ -1,0 +1,2 @@
+-- Data contoh untuk pengembangan lokal (dijalankan oleh `supabase db reset`).
+-- Data referensi (tema) ada di migrasi agar ikut ke production; file ini sengaja kosong.
