@@ -1,14 +1,8 @@
 import "server-only";
-import { createHash, timingSafeEqual } from "node:crypto";
+import { safeEqual } from "./tokens";
 
-const sha256 = (value: string) => createHash("sha256").update(value).digest();
-
-/**
- * Vercel Cron mengirim `Authorization: Bearer <CRON_SECRET>`.
- * Perbandingan dilakukan atas hash agar panjang input tidak bocor lewat waktu eksekusi.
- */
+/** Vercel Cron mengirim `Authorization: Bearer <CRON_SECRET>`. */
 export function isAuthorizedCron(authHeader: string | null, secret: string): boolean {
   if (!authHeader?.startsWith("Bearer ")) return false;
-  const provided = authHeader.slice("Bearer ".length);
-  return timingSafeEqual(sha256(provided), sha256(secret));
+  return safeEqual(authHeader.slice("Bearer ".length), secret);
 }

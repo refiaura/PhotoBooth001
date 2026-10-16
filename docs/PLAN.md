@@ -209,7 +209,7 @@ Hanya jika diminta.
 
 ---
 
-## 7. Keputusan yang masih terbuka (mohon dijawab)
+## 7. Keputusan (K1–K10 disetujui 16 Okt 2026 sesuai usulan)
 
 | #   | Pertanyaan                                                                     | Usulan saya                                                                                                                                                                                                                                                |
 | --- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -232,3 +232,35 @@ Hanya jika diminta.
 - **Teks di `sharp` pada Vercel**: tidak ada font sistem, jadi font di-bundle dan dirender lewat SVG/`text` dengan `fontfile`. Dicoba di Fase 1 langkah 6.
 - **Selisih hitung mundur ≤ 300 ms**: diukur di E2E (log `fireAt` vs waktu jepret aktual di dua konteks) dan saat uji manual.
 - **Safari iOS**: `playsinline` + `muted`, ImageCapture tidak tersedia (jalur canvas), WebP encode via canvas mungkin tidak didukung (fallback JPEG).
+
+## 9. Catatan implementasi Fase 1
+
+Keputusan dan penyimpangan yang muncul saat implementasi:
+
+- **Snapshot sesi di satu baris `booths`.** Status siap (`ready_host`/`ready_guest`) dan progres jepretan
+  (`shots` jsonb) disimpan bersama status, lalu diubah dengan compare-and-swap pada `version`. Rancangan awal
+  memakai `participants.ready` dan status foto dari tabel `photos`. Itu bisa membuat sesi macet saat dua peserta
+  menjepret bersamaan, karena PostgREST tidak punya transaksi lintas tabel. Tabel `photos` tetap menyimpan metadata file.
+- **`shot:captured` digabung dengan `POST /photos/upload-url`.** Permintaan signed upload URL sekaligus menandai
+  "sudah dijepret", jadi satu round-trip di momen kritis. Endpoint `shots/captured` di §2 tidak dibuat.
+- **Endpoint `heartbeat`, `config`, `shots/retake` belum ada.** Semuanya untuk Fase 2 (PAUSED, tema/teks, ulang
+  jepretan). State machine murni sudah mendukung PAUSED, retake, dan kedaluwarsa, lengkap dengan unit test.
+- **Strip tanpa teks.** Hiasan tema dibuat dari SVG murni tanpa font. Caption, tanggal, dan tanda menyusul di Fase 2
+  bersama font TTF yang di-bundle (rencana: paket npm `@expo-google-fonts/fredoka`).
+- **ImageCapture tidak dipakai.** Foto diambil dari frame `<video>` kamera lokal lewat canvas pada resolusi penuh
+  stream (diminta ideal 1920×1080). Latensi `takePhoto()` tidak menentu dan bisa merusak target sinkron ≤ 300 ms.
+- **WebRTC satu arah.** Host selalu membuat offer, tamu menjawab dan mengirim `hello` saat siap. Ini lebih tahan
+  terhadap urutan masuk dan refresh dibanding perfect negotiation dua arah.
+- **Signed upload URL Supabase berlaku 2 jam** (tidak bisa diatur menjadi 5 menit seperti di PRD). Mitigasinya:
+  satu URL untuk satu path acak dan isi file divalidasi saat konfirmasi.
+- **`next/font`:** Fredoka dipakai sebagai variable font. Mengisi `weight: [...]` memicu bug build Turbopack di Next 16.4.
+- **Hasil E2E:** selisih momen jepret antarperangkat terukur 5–42 ms (target ≤ 300 ms), dengan dua konteks
+  Chromium dan kamera palsu di satu mesin. Angka di jaringan nyata perlu diukur lewat uji manual.
+- **Realtime tidak bisa memfilter nama event di policy.** Policy INSERT `realtime.messages` dievaluasi sekali saat
+  join, bukan per pesan. Akibatnya peserta secara teknis bisa mengirim event bernama `session:state`. Karena itu
+  klien memperlakukan siaran hanya sebagai pemicu dan selalu mengambil state dari `GET /api/booths/:code/state`
+  (terautentikasi). Endpoint ringan ini juga dipakai untuk polling, sehingga tidak memanggil API TURN.
+- **Ketahanan dari hasil review:** retry upload URL setelah COMPOSING tidak lagi 409, server tidak memberi URL untuk
+  menimpa file yang sudah ada, konfirmasi ulang tetap mengirim event (idempoten), klaim komposisi dilepas saat gagal
+  dan dikosongkan saat selesai, klien meminta komposisi ulang tiap 10 detik selama COMPOSING, dan slot tamu dilepas
+  bila join gagal di tengah jalan. Sinyal WebRTC membawa `linkId` agar answer untuk offer lama diabaikan.

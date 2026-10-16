@@ -1,25 +1,142 @@
 @import "tailwindcss";
 
-/* Token warna sementara. Palet pastel lengkap + mode gelap dirancang di Fase 1. */
+/*
+ * Token warna Rindu Berat. Terang: krem susu, pink stroberi, biru langit, merah hati.
+ * Gelap: ungu malam berbintang. Pasangan teks/latar di bawah memenuhi WCAG AA.
+ */
 :root {
-  --background: #fff8f0;
-  --foreground: #3b2a3f;
+  --paper: #fff3ea;
+  --surface: #ffffff;
+  --ink: #3a2340; /* 12.9:1 di atas paper */
+  --ink-soft: #7a5c70; /* 5.4:1 di atas paper */
+  --strawberry: #ffb3c7;
+  --sky: #a9dbf7;
+  --heart: #c2255c; /* tombol; teks putih 5.7:1 */
+  --heart-ink: #ffffff;
+  --line: #e9cfd9;
+  --stars: transparent;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #1e1730;
-    --foreground: #f5ecff;
+    --paper: #1c1530;
+    --surface: #2a2143;
+    --ink: #f6edff;
+    --ink-soft: #cdb8dd;
+    --strawberry: #6b3a5c;
+    --sky: #2f4b6e;
+    --heart: #ff8fb1; /* teks gelap 7.9:1 */
+    --heart-ink: #2b0f22;
+    --line: #4a3b66;
+    --stars: #ffffff;
   }
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-strawberry: var(--strawberry);
+  --color-sky: var(--sky);
+  --color-heart: var(--heart);
+  --color-heart-ink: var(--heart-ink);
+  --color-line: var(--line);
+  --font-display: var(--font-fredoka), ui-rounded, system-ui, sans-serif;
+  --font-sans: var(--font-jakarta), system-ui, sans-serif;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: ui-rounded, system-ui, sans-serif;
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  /* Bintang kecil hanya terlihat di mode gelap (--stars transparan di mode terang). */
+  background-image:
+    radial-gradient(1.2px 1.2px at 12% 18%, var(--stars), transparent 60%),
+    radial-gradient(1px 1px at 78% 9%, var(--stars), transparent 60%),
+    radial-gradient(1.4px 1.4px at 43% 62%, var(--stars), transparent 60%),
+    radial-gradient(1px 1px at 88% 74%, var(--stars), transparent 60%),
+    radial-gradient(1.1px 1.1px at 23% 88%, var(--stars), transparent 60%);
+  background-attachment: fixed;
+}
+
+:focus-visible {
+  outline: 3px solid var(--heart);
+  outline-offset: 3px;
+}
+
+@keyframes heart-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  15% {
+    transform: scale(1.22);
+  }
+  30% {
+    transform: scale(0.96);
+  }
+  45% {
+    transform: scale(1.12);
+  }
+}
+
+@keyframes count-pop {
+  from {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes snap-flash {
+  from {
+    opacity: 0.95;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes route-travel {
+  to {
+    stroke-dashoffset: -36;
+  }
+}
+
+@keyframes confetti-fall {
+  from {
+    transform: translate3d(0, -10vh, 0) rotate(0deg);
+    opacity: 1;
+  }
+  to {
+    transform: translate3d(var(--drift), 105vh, 0) rotate(var(--spin));
+    opacity: 0.9;
+  }
+}
+
+@utility animate-heart-pulse {
+  animation: heart-pulse 1.4s ease-in-out infinite;
+}
+@utility animate-count-pop {
+  animation: count-pop 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+@utility animate-snap-flash {
+  animation: snap-flash 0.8s ease-out forwards;
+}
+@utility animate-route-travel {
+  animation: route-travel 1.2s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

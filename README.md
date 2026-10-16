@@ -90,6 +90,12 @@ Isi `.env.local` untuk lokal:
 4. Cron harian (`/api/cron/daily`, 02.00 WIB) melakukan ping ke database agar proyek Supabase gratis
    tidak dijeda. Pembersihan data kedaluwarsa menyusul di Fase 2.
 
+## Uji di HP
+
+Kamera di HP butuh HTTPS, dan HP tidak bisa menjangkau Supabase lokal. Karena itu uji di HP dilakukan lewat deploy
+Vercel (preview URL dari pull request sudah cukup) yang tersambung ke proyek Supabase cloud. Checklist lengkap ada di
+[`docs/UJI-MANUAL.md`](docs/UJI-MANUAL.md).
+
 ## CI
 
 GitHub Actions (`.github/workflows/ci.yml`) berjalan di setiap pull request dan push ke `main`:
