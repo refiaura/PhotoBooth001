@@ -143,6 +143,12 @@ function InvitePanel({ code }: { code: string }) {
   );
 }
 
+function shotDotFill(done: boolean, isCurrent: boolean): string {
+  if (done) return "bg-heart";
+  if (isCurrent) return "bg-strawberry";
+  return "";
+}
+
 function ShotProgress({ captured, current }: { captured: boolean[]; current: number | null }) {
   const n = (current ?? SHOTS_PER_PERSON - 1) + 1;
   return (
@@ -152,7 +158,7 @@ function ShotProgress({ captured, current }: { captured: boolean[]; current: num
         {captured.map((done, i) => (
           <li
             key={i}
-            className={`size-3.5 rounded-full border-2 border-heart ${done ? "bg-heart" : i === current ? "bg-strawberry" : ""}`}
+            className={`size-3.5 rounded-full border-2 border-heart ${shotDotFill(done, i === current)}`}
           />
         ))}
       </ol>
@@ -161,22 +167,25 @@ function ShotProgress({ captured, current }: { captured: boolean[]; current: num
   );
 }
 
+function partnerPlaceholderText(hasGuest: boolean, partnerOnline: boolean, cameraOn: boolean): string {
+  if (!hasGuest) return t.waitingPartner;
+  if (!partnerOnline) return t.partnerAway;
+  if (cameraOn) return t.partnerNoVideo;
+  return t.cameraOff;
+}
+
 export function SessionScreen({ booth, code }: { booth: BoothState; code: string }) {
   const { session, role, camera, partner, offset } = booth;
   if (!session || !role) return null;
 
   const partnerRole: Role = role === "host" ? "guest" : "host";
   const status = session.status;
-  const capturing = status === "CAPTURING" && session.fireAt !== null && offset !== null;
+  const localFireAt =
+    status === "CAPTURING" && session.fireAt !== null && offset !== null
+      ? serverToLocal(session.fireAt, offset)
+      : null;
   const waitingForPartner = !session.hasGuest || !partner.online;
-
-  const partnerPlaceholder = !session.hasGuest
-    ? t.waitingPartner
-    : !partner.online
-      ? t.partnerAway
-      : camera.stream
-        ? t.partnerNoVideo
-        : t.cameraOff;
+  const partnerPlaceholder = partnerPlaceholderText(session.hasGuest, partner.online, !!camera.stream);
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-4 pt-5 pb-10">
@@ -212,9 +221,7 @@ export function SessionScreen({ booth, code }: { booth: BoothState; code: string
             testId="partner-video"
           />
         </div>
-        {capturing && (
-          <Countdown key={session.fireAt} localFireAt={serverToLocal(session.fireAt!, offset!)} />
-        )}
+        {localFireAt !== null && <Countdown key={session.fireAt} localFireAt={localFireAt} />}
       </section>
 
       <section className="flex flex-col gap-4" aria-live="polite">
@@ -249,7 +256,7 @@ export function SessionScreen({ booth, code }: { booth: BoothState; code: string
         )}
 
         {status === "WAITING_READY" && (
-          <ReadyPanel booth={booth} role={role} partnerReady={session.ready[partnerRole]} />
+          <ReadyPanel booth={booth} meReady={session.ready[role]} partnerReady={session.ready[partnerRole]} />
         )}
 
         {status === "CAPTURING" && (
@@ -285,8 +292,15 @@ export function SessionScreen({ booth, code }: { booth: BoothState; code: string
   );
 }
 
-function ReadyPanel({ booth, role, partnerReady }: { booth: BoothState; role: Role; partnerReady: boolean }) {
-  const meReady = booth.session!.ready[role];
+function ReadyPanel({
+  booth,
+  meReady,
+  partnerReady,
+}: {
+  booth: BoothState;
+  meReady: boolean;
+  partnerReady: boolean;
+}) {
   return (
     <div className="flex flex-col gap-3">
       {meReady ? (

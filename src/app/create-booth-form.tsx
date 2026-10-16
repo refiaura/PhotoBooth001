@@ -9,6 +9,18 @@ import { id } from "@/i18n/id";
 
 const t = id.landing;
 
+function errorMessage(err: unknown): string {
+  const code = err instanceof ApiClientError ? err.code : "";
+  switch (code) {
+    case "WRONG_ACCESS_CODE":
+      return t.wrongCode;
+    case "RATE_LIMITED":
+      return t.rateLimited;
+    default:
+      return t.genericError;
+  }
+}
+
 export function CreateBoothForm() {
   const router = useRouter();
   const [accessCode, setAccessCode] = useState("");
@@ -24,10 +36,7 @@ export function CreateBoothForm() {
       saveToken(booth.code, booth.token);
       router.push(`/b/${booth.code}`);
     } catch (err) {
-      const code = err instanceof ApiClientError ? err.code : "";
-      setError(
-        code === "WRONG_ACCESS_CODE" ? t.wrongCode : code === "RATE_LIMITED" ? t.rateLimited : t.genericError,
-      );
+      setError(errorMessage(err));
       setBusy(false);
     }
   }

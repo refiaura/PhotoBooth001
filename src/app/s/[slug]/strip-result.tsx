@@ -11,14 +11,11 @@ import { id } from "@/i18n/id";
 const t = id.result;
 
 type Loaded = Awaited<ReturnType<typeof api.strip>>;
+type State = { kind: "loading" } | { kind: "missing" } | { kind: "ok"; data: Loaded };
 
 export function StripResult() {
   const { slug } = useParams<{ slug: string }>();
-  const [state, setState] = useState<
-    { kind: "loading" } | { kind: "missing" } | { kind: "ok"; data: Loaded }
-  >({
-    kind: "loading",
-  });
+  const [state, setState] = useState<State>({ kind: "loading" });
 
   useEffect(() => {
     let cancelled = false;

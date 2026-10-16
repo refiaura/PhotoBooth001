@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiClientError, api, type IceServer, type PublicSession } from "@/client/api";
+import { ApiClientError, api, type PublicSession, type SessionResponse } from "@/client/api";
 import { cameraErrorKind, startCamera, stopStream, type CameraError } from "@/client/camera";
 import { encodeFrame, grabFrame, type CapturedPhoto } from "@/client/capture";
 import { calibrateClock } from "@/client/clock";
@@ -20,12 +20,7 @@ import type { Role } from "@/domain/session-machine";
 export type BlockedReason = "not-found" | "full" | "gone" | "error";
 type View =
   { kind: "loading" } | { kind: "join" } | { kind: "blocked"; reason: BlockedReason } | { kind: "session" };
-type Auth = {
-  token: string;
-  role: Role;
-  realtime: { channel: string; token: string };
-  iceServers: IceServer[];
-};
+type Auth = { token: string } & Pick<SessionResponse, "role" | "realtime" | "iceServers">;
 
 /** Status setelah sesi selesai: kamera tidak lagi dibutuhkan. */
 const CAMERA_DONE = new Set(["REVIEW", "DONE", "EXPIRED"]);
@@ -86,7 +81,7 @@ export function useBooth(code: string) {
   }, []);
 
   const enter = useCallback(
-    (token: string, res: Awaited<ReturnType<typeof api.session>>) => {
+    (token: string, res: SessionResponse) => {
       setAuth({ token, role: res.role, realtime: res.realtime, iceServers: res.iceServers });
       applySession(res.session);
       setView({ kind: "session" });

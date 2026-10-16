@@ -37,8 +37,7 @@ export class PeerLink {
     this.pc.onnegotiationneeded = async () => {
       if (!options.initiator || this.closed) return;
       try {
-        await this.pc.setLocalDescription();
-        if (this.pc.localDescription) options.send({ description: this.pc.localDescription.toJSON() });
+        await this.sendLocalDescription();
       } catch (err) {
         console.warn("[rtc] gagal membuat offer", err);
       }
@@ -61,10 +60,7 @@ export class PeerLink {
         // Initiator hanya menerima answer; tamu hanya menerima offer.
         if (this.options.initiator !== (description.type === "answer")) return;
         await this.pc.setRemoteDescription(description);
-        if (description.type === "offer") {
-          await this.pc.setLocalDescription();
-          if (this.pc.localDescription) this.options.send({ description: this.pc.localDescription.toJSON() });
-        }
+        if (description.type === "offer") await this.sendLocalDescription();
         for (const c of this.pendingCandidates.splice(0)) await this.pc.addIceCandidate(c);
       } else if (candidate) {
         if (this.pc.remoteDescription) await this.pc.addIceCandidate(candidate);
@@ -78,6 +74,12 @@ export class PeerLink {
   close() {
     this.closed = true;
     this.pc.close();
+  }
+
+  /** Membuat offer/answer sesuai signaling state lalu mengirimkannya ke pasangan. */
+  private async sendLocalDescription() {
+    await this.pc.setLocalDescription();
+    if (this.pc.localDescription) this.options.send({ description: this.pc.localDescription.toJSON() });
   }
 }
 
