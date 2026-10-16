@@ -32,8 +32,7 @@ const schema = z
   })
   .transform(({ TURN_KEY_ID, TURN_KEY_API_TOKEN, ...rest }) => ({
     ...rest,
-    turn:
-      TURN_KEY_ID && TURN_KEY_API_TOKEN ? { keyId: TURN_KEY_ID, apiToken: TURN_KEY_API_TOKEN } : null,
+    turn: TURN_KEY_ID && TURN_KEY_API_TOKEN ? { keyId: TURN_KEY_ID, apiToken: TURN_KEY_API_TOKEN } : null,
   }));
 
 export type ServerEnv = z.infer<typeof schema>;

@@ -13,6 +13,7 @@
     "test:e2e": "playwright test",
     "test:watch": "vitest --project unit",
     "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "db:start": "supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,mailpit",
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",

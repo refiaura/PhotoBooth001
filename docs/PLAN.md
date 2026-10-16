@@ -1,7 +1,7 @@
 # Rencana Implementasi: Rindu Berat
 
 Status: **draf, menunggu persetujuan**. Sumber kebenaran: [`docs/PRD.md`](./PRD.md).
-Dokumen ini hanya merangkum *bagaimana* PRD dikerjakan. Bila ada perbedaan, PRD yang berlaku.
+Dokumen ini hanya merangkum _bagaimana_ PRD dikerjakan. Bila ada perbedaan, PRD yang berlaku.
 
 ---
 
@@ -23,14 +23,14 @@ HP Kamu ──WebRTC P2P (preview saja; STUN + TURN)── HP Pasangan
 
 Prinsip:
 
-- **Server authoritative.** Klien hanya mengirim *niat* lewat HTTP (`ready`, `captured`, `retake`, `config`).
+- **Server authoritative.** Klien hanya mengirim _niat_ lewat HTTP (`ready`, `captured`, `retake`, `config`).
   API route memuat booth, menjalankan fungsi transisi murni, menyimpan hasilnya dengan
-  *optimistic concurrency* (`UPDATE … WHERE status = $lama AND version = $v`), lalu menyiarkan `session:state`.
+  _optimistic concurrency_ (`UPDATE … WHERE status = $lama AND version = $v`), lalu menyiarkan `session:state`.
 - **Tanpa timer di server.** Vercel tidak menahan proses, jadi semua batas waktu (PAUSED 2 menit,
-  booth 24 jam, presence 20 detik) dihitung secara *lazy* oleh fungsi murni `reconcile(booth, now)`
+  booth 24 jam, presence 20 detik) dihitung secara _lazy_ oleh fungsi murni `reconcile(booth, now)`
   di setiap request, ditambah cron harian sebagai penyapu.
 - **Jepretan dijadwalkan per event.** `ready` kedua → server siarkan `shot:scheduled{shotIndex:0, fireAt}`.
-  Konfirmasi `captured` terakhir untuk shot *i* → jadwalkan shot *i+1*. Tidak perlu antrean.
+  Konfirmasi `captured` terakhir untuk shot _i_ → jadwalkan shot _i+1_. Tidak perlu antrean.
 
 ---
 
@@ -105,14 +105,14 @@ Prinsip:
 Mengikuti PRD, plus satu tabel bantu. Semua tabel **RLS aktif tanpa policy untuk anon** (deny-all);
 seluruh akses data lewat service role dari server.
 
-| Tabel | Kolom penting / constraint |
-| --- | --- |
-| `booths` | `id uuid`, `code char(6)` unik parsial (selama status aktif), `status` (enum 8 status), `paused_from`, `paused_at`, `current_shot`, `retake_shot`, `theme_id`, `caption varchar(40)`, `strip_date`, `show_mark`, `version int` (concurrency), `created_at`, `expires_at`; indeks `code`, `expires_at` |
-| `participants` | `booth_id` FK cascade, `role` (`host`/`guest`), **`UNIQUE(booth_id, role)` ⇒ maksimal 2 peserta dijamin DB**, `token_hash` (SHA-256 dari token 256-bit), `last_seen_at`, `user_agent` |
-| `photos` | `UNIQUE(booth_id, participant_id, shot_index, version)`, `shot_index 0–3` (CHECK), `storage_key`, `width`, `height`, `captured_at`, `uploaded_at` |
-| `strips` | `format` (`strip`/`story`), `storage_key`, `public_slug` 22 karakter unik, `expires_at` (+30 hari) |
-| `themes` | `id`, `name`, `layout_json`, `asset_keys`, `is_active` |
-| `rate_limit_hits` | `key`, `window_start`, `count` + fungsi SQL atomik `hit_rate_limit()` |
+| Tabel             | Kolom penting / constraint                                                                                                                                                                                                                                                                            |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `booths`          | `id uuid`, `code char(6)` unik parsial (selama status aktif), `status` (enum 8 status), `paused_from`, `paused_at`, `current_shot`, `retake_shot`, `theme_id`, `caption varchar(40)`, `strip_date`, `show_mark`, `version int` (concurrency), `created_at`, `expires_at`; indeks `code`, `expires_at` |
+| `participants`    | `booth_id` FK cascade, `role` (`host`/`guest`), **`UNIQUE(booth_id, role)` ⇒ maksimal 2 peserta dijamin DB**, `token_hash` (SHA-256 dari token 256-bit), `last_seen_at`, `user_agent`                                                                                                                 |
+| `photos`          | `UNIQUE(booth_id, participant_id, shot_index, version)`, `shot_index 0–3` (CHECK), `storage_key`, `width`, `height`, `captured_at`, `uploaded_at`                                                                                                                                                     |
+| `strips`          | `format` (`strip`/`story`), `storage_key`, `public_slug` 22 karakter unik, `expires_at` (+30 hari)                                                                                                                                                                                                    |
+| `themes`          | `id`, `name`, `layout_json`, `asset_keys`, `is_active`                                                                                                                                                                                                                                                |
+| `rate_limit_hits` | `key`, `window_start`, `count` + fungsi SQL atomik `hit_rate_limit()`                                                                                                                                                                                                                                 |
 
 Bucket Storage `booth-media` privat, batas ukuran 5 MB, MIME `image/webp|image/jpeg|image/png`.
 
@@ -142,6 +142,7 @@ Setiap fase diakhiri: `pnpm lint && pnpm typecheck && pnpm test` (+ e2e bila rel
 cara uji di HP, lalu **berhenti**. Commit kecil per langkah.
 
 ### Fase 0 — Setup
+
 1. `create-next-app` (App Router, TS strict, Tailwind v4, ESLint), pnpm, Prettier, alias `@/`.
 2. Vitest (unit + integration) dan Playwright (konfigurasi saja, dengan flag kamera palsu).
 3. Supabase CLI: `supabase init`, migrasi skema + RLS + bucket + fungsi rate limit, `seed.sql`.
@@ -152,6 +153,7 @@ cara uji di HP, lalu **berhenti**. Commit kecil per langkah.
 8. Tes asap: migrasi berjalan, tes RLS memastikan anon **tidak** bisa membaca/menulis tabel.
 
 ### Fase 1 — Prototipe (alur berdua, 1 tema, unduh PNG)
+
 1. Domain murni + unit test dulu (TDD): `session-machine`, `clock-sync`, `booth-code`, layout tema.
 2. API: `time`, `booths` (ACCESS_CODE + rate limit), `booths/[code]` GET, `join`/rejoin, `session`,
    `heartbeat`, `ready`, `shots/captured`, `photos/upload-url`, `photos`, `strips`, `strips/[slug]` — dengan integration test.
@@ -165,6 +167,7 @@ cara uji di HP, lalu **berhenti**. Commit kecil per langkah.
 9. Checklist uji manual dua HP nyata (termasuk link dari WhatsApp dan jaringan seluler).
 
 ### Fase 2 — Seluruh P0
+
 1. 6 tema frame + pemilih tema (host), caption ≤ 40 karakter, tanggal, tanda opsional; versi Story 1080×1920.
 2. Ulang satu jepretan dari REVIEW; pose hint acak; hitung mundur dengan bunyi + getar.
 3. PAUSED (presence 20 dtk, tunggu 2 menit, batalkan jadwal), rejoin dengan token; fallback preview foto statis bila WebRTC gagal.
@@ -175,6 +178,7 @@ cara uji di HP, lalu **berhenti**. Commit kecil per langkah.
 8. E2E diperluas (retake, PAUSED/rejoin, tamu ketiga ditolak), checklist uji manual dua HP.
 
 ### Fase 3 — P1
+
 Hanya jika diminta.
 
 ---
@@ -205,23 +209,23 @@ Hanya jika diminta.
 
 ## 7. Keputusan yang masih terbuka (mohon dijawab)
 
-| # | Pertanyaan | Usulan saya |
-| --- | --- | --- |
-| K1 | **Otorisasi kanal Realtime.** Peserta tidak punya akun Supabase. | Kanal privat dengan JWT pendek yang ditandatangani server (klaim `booth_id`, `participant_id`) dan policy RLS di `realtime.messages`. Butuh env tambahan `SUPABASE_JWT_SECRET`. Alternatif yang lebih sederhana tapi lebih lemah: nama kanal rahasia acak. |
-| K2 | **Penyedia TURN** | Cloudflare Realtime TURN: kredensial dibuat via API dan berumur pendek, kuota gratis besar. Env: `TURN_KEY_ID` dan `TURN_KEY_API_TOKEN`. Alternatif: Metered.ca. |
-| K3 | **Setelah PAUSED lewat 2 menit** (PRD tidak menyebut) | Booth → `EXPIRED` dengan layar ramah "Buat booth baru". Alternatif: tetap PAUSED sampai 24 jam. |
-| K4 | **Jalur retake** | REVIEW → CAPTURING (hanya `retake_shot`, kedua peserta jepret ulang shot itu) → COMPOSING. Cocokkan dengan diagram aslinya bila ada. |
-| K5 | **PAUSED berlaku di status mana** | Hanya WAITING_READY dan CAPTURING. Di COMPOSING dan REVIEW, server tetap bekerja walau satu pihak terputus. |
-| K6 | **Tema untuk Fase 1** (pertanyaan terbuka PRD) | "Kangen Berat" (amplop + perangko), aset SVG saya gambar sendiri secara sederhana. |
-| K7 | **Sumber data tema** | Definisi layout di kode (bertipe, di-unit-test). Tabel `themes` di-seed untuk `is_active` sebagai feature flag. Menambah tema tetap perlu deploy, dan itu wajar untuk skala pribadi. |
-| K8 | **Analitik dan observability** (PRD menyebut PostHog dan Sentry, prompt tidak) | Fase 2: event dicatat ke tabel Postgres `events` + log Vercel. PostHog/Sentry ditunda kecuali diminta. |
-| K9 | **Lingkungan** | `development` = Supabase lokal (Docker sudah terpasang). `production` = 1 proyek Supabase. Staging (proyek Supabase ke-2) opsional. |
-| K10 | **Tooling** | pnpm, Node 24, Next.js stabil terbaru, Tailwind v4, Vitest, Playwright, zod. |
-| K11 | **Pertanyaan terbuka PRD** | HP/browser kalian berdua (terutama: adakah iPhone?) dan nama domain. Belum memblokir Fase 0. |
+| #   | Pertanyaan                                                                     | Usulan saya                                                                                                                                                                                                                                                |
+| --- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| K1  | **Otorisasi kanal Realtime.** Peserta tidak punya akun Supabase.               | Kanal privat dengan JWT pendek yang ditandatangani server (klaim `booth_id`, `participant_id`) dan policy RLS di `realtime.messages`. Butuh env tambahan `SUPABASE_JWT_SECRET`. Alternatif yang lebih sederhana tapi lebih lemah: nama kanal rahasia acak. |
+| K2  | **Penyedia TURN**                                                              | Cloudflare Realtime TURN: kredensial dibuat via API dan berumur pendek, kuota gratis besar. Env: `TURN_KEY_ID` dan `TURN_KEY_API_TOKEN`. Alternatif: Metered.ca.                                                                                           |
+| K3  | **Setelah PAUSED lewat 2 menit** (PRD tidak menyebut)                          | Booth → `EXPIRED` dengan layar ramah "Buat booth baru". Alternatif: tetap PAUSED sampai 24 jam.                                                                                                                                                            |
+| K4  | **Jalur retake**                                                               | REVIEW → CAPTURING (hanya `retake_shot`, kedua peserta jepret ulang shot itu) → COMPOSING. Cocokkan dengan diagram aslinya bila ada.                                                                                                                       |
+| K5  | **PAUSED berlaku di status mana**                                              | Hanya WAITING_READY dan CAPTURING. Di COMPOSING dan REVIEW, server tetap bekerja walau satu pihak terputus.                                                                                                                                                |
+| K6  | **Tema untuk Fase 1** (pertanyaan terbuka PRD)                                 | "Kangen Berat" (amplop + perangko), aset SVG saya gambar sendiri secara sederhana.                                                                                                                                                                         |
+| K7  | **Sumber data tema**                                                           | Definisi layout di kode (bertipe, di-unit-test). Tabel `themes` di-seed untuk `is_active` sebagai feature flag. Menambah tema tetap perlu deploy, dan itu wajar untuk skala pribadi.                                                                       |
+| K8  | **Analitik dan observability** (PRD menyebut PostHog dan Sentry, prompt tidak) | Fase 2: event dicatat ke tabel Postgres `events` + log Vercel. PostHog/Sentry ditunda kecuali diminta.                                                                                                                                                     |
+| K9  | **Lingkungan**                                                                 | `development` = Supabase lokal (Docker sudah terpasang). `production` = 1 proyek Supabase. Staging (proyek Supabase ke-2) opsional.                                                                                                                        |
+| K10 | **Tooling**                                                                    | pnpm, Node 24, Next.js stabil terbaru, Tailwind v4, Vitest, Playwright, zod.                                                                                                                                                                               |
+| K11 | **Pertanyaan terbuka PRD**                                                     | HP/browser kalian berdua (terutama: adakah iPhone?) dan nama domain. Belum memblokir Fase 0.                                                                                                                                                               |
 
 ---
 
-## 8. Risiko teknis yang akan di-*spike* lebih awal
+## 8. Risiko teknis yang akan di-_spike_ lebih awal
 
 - **Teks di `sharp` pada Vercel**: tidak ada font sistem, jadi font di-bundle dan dirender lewat SVG/`text` dengan `fontfile`. Dicoba di Fase 1 langkah 6.
 - **Selisih hitung mundur ≤ 300 ms**: diukur di E2E (log `fireAt` vs waktu jepret aktual di dua konteks) dan saat uji manual.
