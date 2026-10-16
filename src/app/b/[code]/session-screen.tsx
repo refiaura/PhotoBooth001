@@ -133,14 +133,12 @@ function InvitePanel({ code }: { code: string }) {
       >
         {link}
       </p>
-      <div className="grid grid-cols-2 gap-3">
-        <button type="button" className={buttonSecondary} onClick={copy}>
-          {copied ? t.copied : t.copyLink}
-        </button>
-        <a className={buttonPrimary} href={whatsapp} target="_blank" rel="noopener noreferrer">
-          {t.shareWhatsApp}
-        </a>
-      </div>
+      <a className={buttonPrimary} href={whatsapp} target="_blank" rel="noopener noreferrer">
+        {t.shareWhatsApp}
+      </a>
+      <button type="button" className={buttonSecondary} onClick={copy}>
+        {copied ? t.copied : t.copyLink}
+      </button>
     </section>
   );
 }
@@ -233,11 +231,14 @@ export function SessionScreen({ booth, code }: { booth: BoothState; code: string
           </p>
         )}
 
+        {/* Saat menunggu tamu, mengundang adalah aksi utama; kamera bisa menyusul. */}
+        {status === "WAITING_GUEST" && role === "host" && <InvitePanel code={code} />}
+
         {NEEDS_CAMERA.has(status) && !camera.stream && (
           <div className="flex flex-col gap-2">
             <button
               type="button"
-              className={buttonPrimary}
+              className={status === "WAITING_GUEST" ? buttonSecondary : buttonPrimary}
               onClick={camera.enable}
               disabled={camera.state === "starting"}
             >
@@ -246,8 +247,6 @@ export function SessionScreen({ booth, code }: { booth: BoothState; code: string
             <p className="text-center text-sm text-ink-soft">{t.cameraIntro}</p>
           </div>
         )}
-
-        {status === "WAITING_GUEST" && role === "host" && <InvitePanel code={code} />}
 
         {status === "WAITING_READY" && (
           <ReadyPanel booth={booth} role={role} partnerReady={session.ready[partnerRole]} />

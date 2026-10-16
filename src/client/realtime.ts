@@ -5,6 +5,8 @@ import { supabaseBrowser } from "./supabase-browser";
 
 export type RtcSignal = {
   from: Role;
+  /** Tamu mengumumkan dirinya siap menerima offer (mis. setelah refresh atau kamera baru menyala). */
+  hello?: true;
   description?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit | null;
 };
@@ -47,11 +49,12 @@ export async function connectBoothRealtime(params: {
     });
 
   params.onStatus("connecting");
-  channel.subscribe(async (status) => {
+  channel.subscribe(async (status, err) => {
     if (status === "SUBSCRIBED") {
       await channel.track({ role: params.role, at: Date.now() });
       params.onStatus("connected");
     } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+      console.warn("[realtime] kanal bermasalah, beralih ke polling", status, err?.message ?? "");
       params.onStatus("error");
     }
   });

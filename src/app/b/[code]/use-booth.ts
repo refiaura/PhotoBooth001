@@ -5,7 +5,12 @@ import { ApiClientError, api, type IceServer, type PublicSession } from "@/clien
 import { cameraErrorKind, startCamera, stopStream, type CameraError } from "@/client/camera";
 import { encodeFrame, grabFrame, type CapturedPhoto } from "@/client/capture";
 import { calibrateClock } from "@/client/clock";
-import { connectBoothRealtime, type BoothRealtime, type RealtimeStatus } from "@/client/realtime";
+import {
+  connectBoothRealtime,
+  type BoothRealtime,
+  type RealtimeStatus,
+  type RtcSignal,
+} from "@/client/realtime";
 import { PeerLink } from "@/client/rtc";
 import { loadToken, saveToken } from "@/client/token-store";
 import { submitPhoto } from "@/client/upload";
@@ -26,8 +31,9 @@ type Auth = {
 const CAMERA_DONE = new Set(["REVIEW", "DONE", "EXPIRED"]);
 /** Bila komposisi belum selesai setelah ini, klien memintanya ulang (idempoten di server). */
 const COMPOSE_NUDGE_MS = 12_000;
-/** Cadangan bila Realtime belum tersambung: ambil snapshot berkala. */
+/** Cadangan bila Realtime belum tersambung: ambil snapshot berkala (lebih rapat saat menjepret). */
 const POLL_MS = 4000;
+const POLL_CAPTURING_MS = 1000;
 
 declare global {
   interface Window {
@@ -59,6 +65,8 @@ export function useBooth(code: string) {
   const [partnerOnline, setPartnerOnline] = useState(false);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [rtcState, setRtcState] = useState<RTCPeerConnectionState | "idle">("idle");
+  /** Bertambah setiap tamu mengirim `hello`; host lalu membuat offer baru. */
+  const [helloSeq, setHelloSeq] = useState(0);
 
   const [uploadSlow, setUploadSlow] = useState(false);
   const [failedShots, setFailedShots] = useState<number[]>([]);
@@ -67,6 +75,8 @@ export function useBooth(code: string) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const realtimeRef = useRef<BoothRealtime | null>(null);
   const linkRef = useRef<PeerLink | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const onSignalRef = useRef<(signal: RtcSignal) => void>(() => {});
   const capturedRef = useRef(new Map<number, CapturedPhoto>());
   const firedRef = useRef(new Set<string>());
 
@@ -160,7 +170,7 @@ export function useBooth(code: string) {
       token: auth.realtime.token,
       role: auth.role,
       onState: applySession,
-      onSignal: (signal) => void linkRef.current?.handleSignal(signal),
+      onSignal: (signal) => onSignalRef.current(signal),
       onPresence: (online) => setPartnerOnline(online.includes(partner)),
       onStatus: setRealtimeStatus,
     }).then((rt) => {
@@ -184,9 +194,9 @@ export function useBooth(code: string) {
         .catch(() => {});
       return;
     }
-    const timer = setInterval(refresh, POLL_MS);
+    const timer = setInterval(refresh, session?.status === "CAPTURING" ? POLL_CAPTURING_MS : POLL_MS);
     return () => clearInterval(timer);
-  }, [auth, code, realtimeStatus, refresh, applySession]);
+  }, [auth, code, realtimeStatus, refresh, applySession, session?.status]);
 
   // 4. Kamera: hanya setelah tombol ditekan; mati saat sesi selesai atau halaman ditutup.
   const enableCamera = useCallback(async () => {
@@ -300,25 +310,74 @@ export function useBooth(code: string) {
     };
   }, [status, stripSlug]);
 
-  // 8. Preview pasangan via WebRTC saat keduanya online dan kamera menyala.
+  // 8. Preview pasangan via WebRTC. Host selalu yang membuat offer; tamu menjawab.
   useEffect(() => {
-    if (!auth || !stream || !partnerOnline || realtimeStatus !== "connected" || sessionOver) return;
-    const link = new PeerLink({
-      iceServers: auth.iceServers,
-      polite: auth.role === "guest",
-      localStream: stream,
-      send: (signal) => realtimeRef.current?.sendSignal({ ...signal, from: auth.role }),
-      onRemoteStream: setRemoteStream,
-      onConnectionState: setRtcState,
-    });
-    linkRef.current = link;
+    streamRef.current = sessionOver ? null : stream;
+  }, [stream, sessionOver]);
+
+  const makeLink = useCallback(
+    (initiator: boolean, localStream: MediaStream) => {
+      if (!auth) return null;
+      linkRef.current?.close();
+      const link = new PeerLink({
+        iceServers: auth.iceServers,
+        initiator,
+        localStream,
+        send: (signal) => realtimeRef.current?.sendSignal({ ...signal, from: auth.role }),
+        onRemoteStream: setRemoteStream,
+        onConnectionState: setRtcState,
+      });
+      linkRef.current = link;
+      return link;
+    },
+    [auth],
+  );
+
+  const onSignal = useCallback(
+    (signal: RtcSignal) => {
+      if (!auth) return;
+      if (auth.role === "host") {
+        if (signal.hello) setHelloSeq((n) => n + 1);
+        else void linkRef.current?.handleSignal(signal);
+        return;
+      }
+      // Tamu: setiap offer baru (mis. host refresh) memulai koneksi baru.
+      if (signal.description?.type === "offer") {
+        if (!streamRef.current) return;
+        makeLink(false, streamRef.current);
+      }
+      void linkRef.current?.handleSignal(signal);
+    },
+    [auth, makeLink],
+  );
+
+  useEffect(() => {
+    onSignalRef.current = onSignal;
+  }, [onSignal]);
+
+  const rtcReady = !!auth && !!stream && realtimeStatus === "connected" && !sessionOver;
+
+  useEffect(() => {
+    if (!rtcReady || auth.role !== "host" || !partnerOnline) return;
+    const link = makeLink(true, stream);
     return () => {
-      link.close();
+      link?.close();
+      if (linkRef.current === link) linkRef.current = null;
+      setRemoteStream(null);
+      setRtcState("idle");
+    };
+  }, [rtcReady, auth, stream, partnerOnline, helloSeq, makeLink]);
+
+  useEffect(() => {
+    if (!rtcReady || auth.role !== "guest") return;
+    realtimeRef.current?.sendSignal({ from: "guest", hello: true });
+    return () => {
+      linkRef.current?.close();
       linkRef.current = null;
       setRemoteStream(null);
       setRtcState("idle");
     };
-  }, [auth, stream, partnerOnline, realtimeStatus, sessionOver]);
+  }, [rtcReady, auth]);
 
   const setReady = useCallback(
     async (ready: boolean) => {

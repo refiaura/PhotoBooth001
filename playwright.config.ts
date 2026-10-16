@@ -1,5 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// Nilai lokal (mis. ACCESS_CODE) dibaca dari .env.local yang juga dipakai `next dev`.
+try {
+  process.loadEnvFile(".env.local");
+} catch {
+  // Tanpa .env.local, tes yang butuh kode akses akan di-skip.
+}
+
 const PORT = Number(process.env.E2E_PORT ?? 3000);
 const baseURL = `http://localhost:${PORT}`;
 
@@ -9,6 +16,8 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,
+  // `next dev` mengompilasi route saat pertama dibuka; beri waktu lebih.
+  expect: { timeout: 20_000 },
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",
   use: {

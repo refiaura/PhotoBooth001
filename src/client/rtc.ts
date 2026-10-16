@@ -5,19 +5,21 @@ import type { RtcSignal } from "./realtime";
 const PREVIEW_MAX_BITRATE = 600_000;
 
 /**
- * Koneksi WebRTC P2P untuk preview pasangan, memakai pola "perfect negotiation"
- * (tamu = polite, host = impolite) agar tabrakan offer dari dua sisi selesai sendiri.
+ * Koneksi WebRTC P2P untuk preview pasangan.
+ *
+ * Hanya host (initiator) yang membuat offer; tamu membuat PeerLink saat offer tiba lalu
+ * menjawab. Dengan satu arah negosiasi, offer tidak bisa saling bertabrakan atau hilang
+ * karena sisi lain belum siap. Kandidat ICE yang tiba sebelum remote description diantrikan.
  */
 export class PeerLink {
   private readonly pc: RTCPeerConnection;
-  private makingOffer = false;
-  private ignoreOffer = false;
+  private readonly pendingCandidates: RTCIceCandidateInit[] = [];
   private closed = false;
 
   constructor(
     private readonly options: {
       iceServers: IceServer[];
-      polite: boolean;
+      initiator: boolean;
       localStream: MediaStream;
       send: (signal: Omit<RtcSignal, "from">) => void;
       onRemoteStream: (stream: MediaStream) => void;
@@ -29,21 +31,21 @@ export class PeerLink {
     this.pc.ontrack = ({ streams }) => {
       if (streams[0]) options.onRemoteStream(streams[0]);
     };
-    this.pc.onicecandidate = ({ candidate }) => options.send({ candidate: candidate?.toJSON() ?? null });
+    this.pc.onicecandidate = ({ candidate }) => {
+      if (candidate) options.send({ candidate: candidate.toJSON() });
+    };
     this.pc.onnegotiationneeded = async () => {
+      if (!options.initiator || this.closed) return;
       try {
-        this.makingOffer = true;
         await this.pc.setLocalDescription();
         if (this.pc.localDescription) options.send({ description: this.pc.localDescription.toJSON() });
       } catch (err) {
-        console.warn("[rtc] negosiasi gagal", err);
-      } finally {
-        this.makingOffer = false;
+        console.warn("[rtc] gagal membuat offer", err);
       }
     };
     this.pc.onconnectionstatechange = () => {
       options.onConnectionState(this.pc.connectionState);
-      if (this.pc.connectionState === "failed") this.pc.restartIce();
+      if (this.pc.connectionState === "failed" && options.initiator) this.pc.restartIce();
     };
 
     for (const track of options.localStream.getVideoTracks()) {
@@ -56,22 +58,17 @@ export class PeerLink {
     if (this.closed) return;
     try {
       if (description) {
-        const collision =
-          description.type === "offer" && (this.makingOffer || this.pc.signalingState !== "stable");
-        this.ignoreOffer = !this.options.polite && collision;
-        if (this.ignoreOffer) return;
-
+        // Initiator hanya menerima answer; tamu hanya menerima offer.
+        if (this.options.initiator !== (description.type === "answer")) return;
         await this.pc.setRemoteDescription(description);
         if (description.type === "offer") {
           await this.pc.setLocalDescription();
           if (this.pc.localDescription) this.options.send({ description: this.pc.localDescription.toJSON() });
         }
+        for (const c of this.pendingCandidates.splice(0)) await this.pc.addIceCandidate(c);
       } else if (candidate) {
-        try {
-          await this.pc.addIceCandidate(candidate);
-        } catch (err) {
-          if (!this.ignoreOffer) throw err;
-        }
+        if (this.pc.remoteDescription) await this.pc.addIceCandidate(candidate);
+        else this.pendingCandidates.push(candidate);
       }
     } catch (err) {
       console.warn("[rtc] sinyal gagal diproses", err);

@@ -14,13 +14,13 @@ function Window({ label, tint }: { label: string; tint: string }) {
 
 export default function Home() {
   return (
-    <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-8 px-5 pt-10 pb-12">
+    <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-5 pt-8 pb-10">
       <header className="flex flex-col gap-3">
         <h1 className="font-display text-5xl leading-none font-bold tracking-tight">{id.appName}</h1>
         <p className="font-display text-2xl leading-snug font-medium text-ink">{id.tagline}</p>
       </header>
 
-      <figure aria-hidden className="grid grid-cols-2 gap-x-5">
+      <figure aria-hidden className="mx-auto grid w-3/4 grid-cols-2 gap-x-4">
         <RouteLine className="col-span-2 -mb-1" />
         <Window label={id.you} tint="bg-strawberry" />
         <Window label={id.partner} tint="bg-sky" />
